@@ -71,6 +71,7 @@ bool request_resources(int job_id, int request[NUM_RESOURCES]) {
     for (int i = 0; i < NUM_RESOURCES; i++) {
         bankers.available[i] -= request[i];
         bankers.allocation[job_id][i] += request[i];
+        bankers.need[job_id][i] -= request[i];
     }
     
     // Check if safe
@@ -81,6 +82,7 @@ bool request_resources(int job_id, int request[NUM_RESOURCES]) {
         for (int i = 0; i < NUM_RESOURCES; i++) {
             bankers.available[i] += request[i];
             bankers.allocation[job_id][i] -= request[i];
+            bankers.need[job_id][i] += request[i];
         }
         return false;
     }
