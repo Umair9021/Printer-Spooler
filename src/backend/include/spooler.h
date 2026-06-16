@@ -111,5 +111,6 @@ bool request_resources(int job_id, int request[NUM_RESOURCES]);
 void release_resources(int job_id, int release[NUM_RESOURCES]);
 bool is_safe();
 void run_safety_check();
+bool can_job_run_safely(PrintJob job);
 
 #endif // SPOOLER_H

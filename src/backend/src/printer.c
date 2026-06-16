@@ -21,45 +21,51 @@ void *worker_routine(void *arg) {
     while (1) {
         pthread_mutex_lock(&queue.lock);
         
-        while (queue.count == 0 || is_paused || worker->id > active_workers) {
+        int selected_index = -1;
+        while (1) {
+            if (is_paused || worker->id > active_workers) {
+                pthread_cond_wait(&queue.not_empty, &queue.lock);
+                continue;
+            }
+            
+            selected_index = -1;
+            for (int i = 0; i < queue.count; i++) {
+                if (!can_job_run_safely(queue.jobs[i])) continue;
+                
+                if (selected_index == -1) {
+                    selected_index = i;
+                    continue;
+                }
+                
+                if (queue.policy == POLICY_PRIORITY) {
+                    if (queue.jobs[i].priority > queue.jobs[selected_index].priority) selected_index = i;
+                } else if (queue.policy == POLICY_SJF) {
+                    if (queue.jobs[i].pages < queue.jobs[selected_index].pages) selected_index = i;
+                }
+            }
+            
+            if (selected_index != -1) {
+                break; // Found a safe job!
+            }
+            
+            // Queue is empty OR all jobs are unsafe (blocked). Wait for a signal.
             pthread_cond_wait(&queue.not_empty, &queue.lock);
         }
         
-        // Dequeue needs to return the actual job, or we get the job and then remove it.
-        // Let's assume we implement get_and_dequeue_job in spooler.c
-        // For now, we will do the logic here if we must, or we change dequeue_job signature.
-        
-        // To keep it simple, we use the dequeue_job index logic modified:
-        // Actually, I will write the fix to spooler.c to return PrintJob shortly.
-        // Let's assume dequeue_job_struct() exists and returns a PrintJob.
-        PrintJob job = {0};
-        
-        int selected_index = 0;
-        for (int i = 1; i < queue.count; i++) {
-            if (queue.policy == POLICY_PRIORITY) {
-                if (queue.jobs[i].priority > queue.jobs[selected_index].priority) selected_index = i;
-            } else if (queue.policy == POLICY_SJF) {
-                if (queue.jobs[i].pages < queue.jobs[selected_index].pages) selected_index = i;
-            }
-        }
-        job = queue.jobs[selected_index];
+        PrintJob job = queue.jobs[selected_index];
         for (int i = selected_index; i < queue.count - 1; i++) {
             queue.jobs[i] = queue.jobs[i+1];
         }
         queue.count--;
         
-        pthread_mutex_unlock(&queue.lock);
-        
+        // At this point we already know it's safe to run. We just need to formally allocate it.
         worker->busy = true;
         worker->current_job_id = job.id;
         worker->progress = 0;
         
-        // Banker's Algorithm check
         int req[NUM_RESOURCES] = {job.priority, job.pages / 2 + 1, job.pages / 3 + 1};
-        // Simple mapping: Process ID = job.id % MAX_JOBS
         int process_idx = job.id % MAX_JOBS;
         
-        pthread_mutex_lock(&queue.lock); // Using queue lock to protect banker state
         if (bankers.n_processes <= process_idx) bankers.n_processes = process_idx + 1;
         
         for (int i = 0; i < NUM_RESOURCES; i++) {
@@ -67,20 +73,8 @@ void *worker_routine(void *arg) {
             bankers.need[process_idx][i] = req[i] - bankers.allocation[process_idx][i];
         }
         
-        bool safe = request_resources(process_idx, req);
+        request_resources(process_idx, req);
         pthread_mutex_unlock(&queue.lock);
-        
-        if (!safe) {
-            char buf[256];
-            sprintf(buf, "{\"msg\": \"Unsafe state — job %d rejected due to Banker's Algorithm\"}", job.id);
-            emit_json("DEADLOCK", buf);
-            
-            // Re-enqueue the job without artificially boosting the total_submitted stats
-            requeue_job(job);
-            worker->busy = false;
-            sleep(1); // Prevent spinning
-            continue;
-        }
         
         // Job Started
         char start_msg[512];
@@ -109,6 +103,7 @@ void *worker_routine(void *arg) {
         pthread_mutex_lock(&queue.lock);
         release_resources(process_idx, req);
         queue.total_printed++;
+        pthread_cond_broadcast(&queue.not_empty); // Wake up threads to re-evaluate queue!
         pthread_mutex_unlock(&queue.lock);
         
         worker->busy = false;

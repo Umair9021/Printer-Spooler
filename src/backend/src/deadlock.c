@@ -103,3 +103,48 @@ void run_safety_check() {
             bankers.available[RES_INK], bankers.available[RES_PAPER], bankers.available[RES_TONER]);
     emit_json("BANKERS", buf);
 }
+
+bool can_job_run_safely(PrintJob job) {
+    int req[NUM_RESOURCES] = {job.priority, job.pages / 2 + 1, job.pages / 3 + 1};
+    int process_idx = job.id % MAX_JOBS;
+    
+    // Check if request exceeds currently available
+    for (int i = 0; i < NUM_RESOURCES; i++) {
+        if (req[i] > bankers.available[i]) {
+            return false;
+        }
+    }
+    
+    // Temporarily allocate to see if it leads to a safe state
+    int old_n = bankers.n_processes;
+    if (bankers.n_processes <= process_idx) bankers.n_processes = process_idx + 1;
+    
+    int old_max[NUM_RESOURCES], old_need[NUM_RESOURCES];
+    for (int i = 0; i < NUM_RESOURCES; i++) {
+        old_max[i] = bankers.maximum[process_idx][i];
+        old_need[i] = bankers.need[process_idx][i];
+        
+        bankers.maximum[process_idx][i] = req[i];
+        bankers.need[process_idx][i] = req[i];
+    }
+    
+    for (int i = 0; i < NUM_RESOURCES; i++) {
+        bankers.available[i] -= req[i];
+        bankers.allocation[process_idx][i] += req[i];
+        bankers.need[process_idx][i] -= req[i];
+    }
+    
+    bool safe = is_safe();
+    
+    // Revert
+    for (int i = 0; i < NUM_RESOURCES; i++) {
+        bankers.available[i] += req[i];
+        bankers.allocation[process_idx][i] -= req[i];
+        
+        bankers.maximum[process_idx][i] = old_max[i];
+        bankers.need[process_idx][i] = old_need[i];
+    }
+    bankers.n_processes = old_n;
+    
+    return safe;
+}
