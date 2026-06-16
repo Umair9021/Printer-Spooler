@@ -71,7 +71,8 @@ def health_check(connection_or_path, request_or_headers):
     if path is None and isinstance(connection_or_path, str):
         path = connection_or_path
         
-    if path in ["/", "/health"]:
+    # ONLY intercept /health. Do NOT intercept / because the frontend connects to / for WebSockets!
+    if path == "/health":
         if isinstance(connection_or_path, str):
             return (http.HTTPStatus.OK, [], b"OK\n")
         else:
