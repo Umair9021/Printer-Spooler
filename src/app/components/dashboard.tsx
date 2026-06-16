@@ -263,6 +263,16 @@ export function Dashboard({ onBack }: { onBack: () => void }) {
     `${String(Math.floor(s / 3600)).padStart(2, "0")}:${String(Math.floor((s % 3600) / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
   const active = threads.filter((th) => th.job).length;
 
+  const sortedJobs = useMemo(() => {
+    const arr = [...jobs];
+    if (policy === "Priority") {
+      arr.sort((a, b) => priorityWeightInv[b.priority] - priorityWeightInv[a.priority] || a.id - b.id);
+    } else if (policy === "SJF") {
+      arr.sort((a, b) => a.pages - b.pages || a.id - b.id);
+    }
+    return arr;
+  }, [jobs, policy]);
+
   const btn = `border rounded px-3 py-1.5 text-xs transition hover:opacity-80 flex items-center gap-1.5`;
   const input = `border rounded px-2 py-1.5 text-xs w-full bg-transparent`;
   const prioStyle = (p: Priority) => p === "High"
@@ -358,7 +368,7 @@ export function Dashboard({ onBack }: { onBack: () => void }) {
                   ) : (
                     <ul className="flex flex-col gap-1.5 max-h-[240px] overflow-y-auto pr-1">
                       <AnimatePresence>
-                        {jobs.map((j, idx) => (
+                        {sortedJobs.map((j, idx) => (
                           <motion.li
                             key={j.id}
                             layout
@@ -472,7 +482,7 @@ export function Dashboard({ onBack }: { onBack: () => void }) {
 
             </motion.div>
           ) : (
-            <BankersView key="bankers" t={t} jobs={jobs} threads={threads} onRun={runSafety} />
+            <BankersView key="bankers" t={t} jobs={sortedJobs} threads={threads} onRun={runSafety} />
           )}
         </AnimatePresence>
       </div>
