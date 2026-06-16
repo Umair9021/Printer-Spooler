@@ -5,6 +5,8 @@
 #include "../include/spooler.h"
 
 JobQueue queue;
+int active_workers = 3;
+bool is_paused = true;
 
 void init_queue() {
     queue.count = 0;
@@ -47,8 +49,8 @@ void emit_stats() {
     for(int i=0; i<NUM_WORKERS; i++) {
         if(workers[i].busy) active++;
     }
-    sprintf(buf, "{\"submitted\": %d, \"printed\": %d, \"active\": %d}", 
-            queue.total_submitted, queue.total_printed, active);
+    sprintf(buf, "{\"submitted\": %d, \"printed\": %d, \"active\": %d, \"is_paused\": %s, \"active_workers\": %d}", 
+            queue.total_submitted, queue.total_printed, active, is_paused ? "true" : "false", active_workers);
     emit_json("STATS", buf);
 }
 
@@ -142,5 +144,34 @@ void reset_system() {
     pthread_mutex_unlock(&queue.lock);
     emit_log("System reset by user");
     emit_queue_update();
+    emit_stats();
+}
+
+void set_execution_state(int state) {
+    pthread_mutex_lock(&queue.lock);
+    is_paused = (state == 0);
+    if (!is_paused) {
+        pthread_cond_broadcast(&queue.not_empty); // Wake up threads
+    }
+    pthread_mutex_unlock(&queue.lock);
+    
+    char msg[128];
+    sprintf(msg, "Spooler execution %s", is_paused ? "PAUSED" : "RESUMED");
+    emit_log(msg);
+    emit_stats();
+}
+
+void set_worker_count(int count) {
+    if (count < 1) count = 1;
+    if (count > NUM_WORKERS) count = NUM_WORKERS;
+    
+    pthread_mutex_lock(&queue.lock);
+    active_workers = count;
+    pthread_cond_broadcast(&queue.not_empty); // Wake up threads to re-evaluate their state
+    pthread_mutex_unlock(&queue.lock);
+    
+    char msg[128];
+    sprintf(msg, "Worker threads set to %d", active_workers);
+    emit_log(msg);
     emit_stats();
 }

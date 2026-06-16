@@ -96,6 +96,8 @@ export function Dashboard({ onBack }: { onBack: () => void }) {
   const [policy, setPolicy] = useState<Policy>("Priority");
   const [stats, setStats] = useState({ submitted: 0, printed: 0 });
   const [uptime, setUptime] = useState(0);
+  const [running, setRunning] = useState(false);
+  const [workerCount, setWorkerCount] = useState(3);
 
   // submit form
   const [user, setUser] = useState(USERS[0]);
@@ -156,6 +158,8 @@ export function Dashboard({ onBack }: { onBack: () => void }) {
            });
         } else if (msg.event === "STATS") {
            setStats({ submitted: data.submitted, printed: data.printed });
+           if (data.is_paused !== undefined) setRunning(data.is_paused === "false");
+           if (data.active_workers !== undefined) setWorkerCount(data.active_workers);
         } else if (msg.event === "LOG") {
            addLog(data.msg);
         } else if (msg.event === "JOB_SUBMITTED") {
@@ -243,6 +247,18 @@ export function Dashboard({ onBack }: { onBack: () => void }) {
     }
   };
 
+  const toggleRunning = () => {
+    if (ws.current?.readyState === WebSocket.OPEN) {
+      ws.current.send(JSON.stringify({ cmd: "SET_EXECUTION", running: !running }));
+    }
+  };
+
+  const changeWorkers = (count: number) => {
+    if (ws.current?.readyState === WebSocket.OPEN) {
+      ws.current.send(JSON.stringify({ cmd: "SET_WORKERS", count }));
+    }
+  };
+
   const fmt = (s: number) =>
     `${String(Math.floor(s / 3600)).padStart(2, "0")}:${String(Math.floor((s % 3600) / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
   const active = threads.filter((th) => th.job).length;
@@ -318,7 +334,12 @@ export function Dashboard({ onBack }: { onBack: () => void }) {
                 {/* Queue */}
                 <div className="border rounded p-3" style={{ borderColor: t.border, background: t.surf }}>
                   <div className="flex items-center justify-between mb-2 gap-2">
-                    <h3 className="text-[11px] tracking-widest">QUEUE · {jobs.length}</h3>
+                    <div className="flex items-center gap-2">
+                      <h3 className="text-[11px] tracking-widest">QUEUE · {jobs.length}</h3>
+                      <button onClick={toggleRunning} disabled={!connected} className="px-2 py-0.5 rounded text-[9px] tracking-widest border transition" style={{ borderColor: running ? t.fg : t.border, background: running ? t.lift : 'transparent' }}>
+                        {running ? "PAUSE" : "EXECUTE"}
+                      </button>
+                    </div>
                     <div className="flex items-center gap-1.5">
                       <span className="text-[9px] tracking-widest" style={{ color: t.mut }}>POLICY</span>
                       <select value={policy} onChange={changePolicy} disabled={!connected}
@@ -365,10 +386,16 @@ export function Dashboard({ onBack }: { onBack: () => void }) {
                 {/* Threads */}
                 <div className="border rounded p-3" style={{ borderColor: t.border, background: t.surf }}>
                   <div className="flex items-center justify-between mb-2">
-                    <h3 className="text-[11px] tracking-widest">WORKER THREADS · {threads.length}</h3>
+                    <h3 className="text-[11px] tracking-widest">WORKER THREADS · {workerCount}</h3>
+                    <div className="flex gap-1">
+                      <button onClick={() => changeWorkers(workerCount - 1)} disabled={workerCount <= 1 || !connected} className="border rounded px-2 py-0.5 text-[10px]" style={{ borderColor: t.border }}>-</button>
+                      <button onClick={() => changeWorkers(workerCount + 1)} disabled={workerCount >= 5 || !connected} className="border rounded px-2 py-0.5 text-[10px]" style={{ borderColor: t.border }}>+</button>
+                    </div>
                   </div>
                   <div className={`grid gap-2 grid-cols-3`}>
-                    {threads.map((th) => {
+                    {Array.from({ length: workerCount }, (_, i) => {
+                      const id = i + 1;
+                      const th = threads.find(t => t.id === id) || { id, job: null, progress: 0 };
                       const isActive = !!th.job;
                       return (
                         <motion.div

@@ -48,6 +48,12 @@ int main() {
             reset_system();
         } else if (strcmp(cmd, "RUN_SAFETY") == 0) {
             run_safety_check();
+        } else if (strcmp(cmd, "SET_EXECUTION") == 0) {
+            char *state_str = strtok(NULL, "|");
+            if (state_str) set_execution_state(atoi(state_str));
+        } else if (strcmp(cmd, "SET_WORKERS") == 0) {
+            char *count_str = strtok(NULL, "|");
+            if (count_str) set_worker_count(atoi(count_str));
         }
     }
     

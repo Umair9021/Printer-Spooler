@@ -6,7 +6,7 @@
 #include <time.h>
 
 #define MAX_JOBS 50
-#define NUM_WORKERS 3
+#define NUM_WORKERS 5
 
 // Priorities
 #define PRIO_LOW 1
@@ -78,6 +78,8 @@ extern JobQueue queue;
 extern WorkerThread workers[NUM_WORKERS];
 extern BankersState bankers;
 extern int ipc_pipe[2];
+extern int active_workers;
+extern bool is_paused;
 
 // Function Prototypes
 
@@ -92,6 +94,8 @@ void requeue_job(PrintJob job);
 int dequeue_job();
 void set_policy(int policy);
 void reset_system();
+void set_execution_state(int state);
+void set_worker_count(int count);
 
 // user.c
 void submit_job(const char *user, const char *doc, int priority, int pages);

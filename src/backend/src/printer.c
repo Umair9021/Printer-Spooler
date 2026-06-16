@@ -21,7 +21,7 @@ void *worker_routine(void *arg) {
     while (1) {
         pthread_mutex_lock(&queue.lock);
         
-        while (queue.count == 0) {
+        while (queue.count == 0 || is_paused || worker->id > active_workers) {
             pthread_cond_wait(&queue.not_empty, &queue.lock);
         }
         

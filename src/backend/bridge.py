@@ -52,6 +52,11 @@ async def handle_client(websocket):
                     pipe_msg = "RESET\n"
                 elif cmd == "RUN_SAFETY":
                     pipe_msg = "RUN_SAFETY\n"
+                elif cmd == "SET_EXECUTION":
+                    state = 1 if data.get("running") else 0
+                    pipe_msg = f"SET_EXECUTION|{state}\n"
+                elif cmd == "SET_WORKERS":
+                    pipe_msg = f"SET_WORKERS|{data.get('count', 3)}\n"
                 
                 if pipe_msg and spooler_process:
                     spooler_process.stdin.write(pipe_msg.encode('utf-8'))
