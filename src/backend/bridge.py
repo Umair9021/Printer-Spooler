@@ -63,6 +63,25 @@ async def handle_client(websocket):
     finally:
         clients.remove(websocket)
 
+import http
+
+def health_check(connection_or_path, request_or_headers):
+    # Handle both legacy (path, headers) and new asyncio (connection, request) APIs
+    path = getattr(request_or_headers, "path", None)
+    if path is None and isinstance(connection_or_path, str):
+        path = connection_or_path
+        
+    if path in ["/", "/health"]:
+        if isinstance(connection_or_path, str):
+            return (http.HTTPStatus.OK, [], b"OK\n")
+        else:
+            try:
+                return connection_or_path.respond(http.HTTPStatus.OK, "OK\n")
+            except AttributeError:
+                from websockets.http11 import Response
+                return Response(200, "OK", [], b"OK\n")
+    return None
+
 async def main():
     global spooler_process
     
@@ -85,7 +104,7 @@ async def main():
     # Start WebSocket server
     port = int(os.environ.get("PORT", 8765))
     print(f"Starting WebSocket server on port {port}...")
-    async with websockets.serve(handle_client, "0.0.0.0", port):
+    async with websockets.serve(handle_client, "0.0.0.0", port, process_request=health_check):
         await asyncio.Future()  # run forever
 
 if __name__ == "__main__":
